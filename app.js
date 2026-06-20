@@ -1059,57 +1059,175 @@ async function loadReportData(type) {
 async function loadSettings() {
   if (App.user?.role !== 'admin') return;
   const el = document.getElementById('pageSettings');
+  el.innerHTML = `<div class="max-w-lg mx-auto space-y-4">${skeletonTable()}</div>`;
+
+  showLoading('กำลังโหลดการตั้งค่า...');
+  const res = await api('getSettings');
+  hideLoading();
+
+  const settings = res.success ? res.data : [];
+  const find = key => settings.find(s => s.Key === key) || {};
+
+  const lineRow    = find('LINE_NOTIFY_TOKEN');
+  const hasToken   = lineRow.HasValue;
+  const maskedVal  = lineRow.Value || '';
+  const hospitalRow= find('HOSPITAL_NAME');
+  const alertRow   = find('ALERT_DAYS');
+
   el.innerHTML = `
   <div class="max-w-lg mx-auto space-y-4">
 
-    <!-- LINE Notify -->
+    <!-- LINE Notify Token -->
     <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div class="bg-[#00B900] px-5 py-3">
-        <h3 class="text-white font-semibold text-sm">🟢 LINE Notify</h3>
+      <div class="bg-[#00B900] px-5 py-3 flex items-center justify-between">
+        <h3 class="text-white font-semibold text-sm">🟢 LINE Notify Token</h3>
+        ${hasToken ? '<span class="bg-white/20 text-white text-xs px-2 py-0.5 rounded-full">✅ ตั้งค่าแล้ว</span>'
+                   : '<span class="bg-red-500/80 text-white text-xs px-2 py-0.5 rounded-full">⚠️ ยังไม่ตั้งค่า</span>'}
       </div>
       <div class="p-5 space-y-3">
-        <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-xs text-yellow-800">
-          ⚠️ LINE Token เก็บไว้ใน <b>Script Properties</b> ของ GAS เท่านั้น<br/>
-          ไปที่ Project Settings → Script Properties → เพิ่ม key: <code>LINE_NOTIFY_TOKEN</code>
+        <div class="text-xs text-slate-500 bg-slate-50 rounded-lg p-3 space-y-1">
+          <p>1. ไปที่ <a href="https://notify-bot.line.me/th_TH/my" target="_blank" class="text-blue-600 underline">notify-bot.line.me</a> → Generate token</p>
+          <p>2. วาง Token ด้านล่าง แล้วกด บันทึก</p>
+          <p>3. Token จะถูกเก็บใน <b>Setting Sheet</b> (คอลัมน์ Value)</p>
         </div>
-        <button onclick="testLineMessage()" class="btn btn-outline w-full justify-center">
-          📲 ทดสอบส่งข้อความ LINE
-        </button>
-        <button onclick="runLineNotifyManual()" class="btn btn-primary w-full justify-center">
-          🔍 ตรวจสอบและแจ้งเตือนยาหมดอายุ
-        </button>
+        <div>
+          <label class="form-label">LINE Notify Token</label>
+          <div class="flex gap-2">
+            <input id="lineTokenInput" type="password" class="form-input flex-1 font-mono text-sm"
+                   placeholder="${hasToken ? maskedVal : 'วาง Token ที่นี่...'}"
+                   autocomplete="off"/>
+            <button onclick="toggleTokenVisibility()" class="btn btn-secondary btn-sm whitespace-nowrap" id="toggleTokenBtn">👁 แสดง</button>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          <button onclick="saveLineToken()" class="btn btn-success flex-1 justify-center">💾 บันทึก Token</button>
+          <button onclick="clearLineToken()" class="btn btn-danger btn-sm" title="ลบ Token">🗑 ลบ</button>
+        </div>
+        <div class="border-t border-slate-100 pt-3 flex gap-2">
+          <button onclick="testLineMessage()" class="btn btn-outline flex-1 justify-center btn-sm">
+            📲 ทดสอบส่ง LINE
+          </button>
+          <button onclick="runLineNotifyManual()" class="btn btn-primary flex-1 justify-center btn-sm">
+            🔍 ตรวจ + แจ้งเตือน
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ตั้งค่าทั่วไป -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="bg-[#0f1e3c] px-5 py-3">
+        <h3 class="text-white font-semibold text-sm">⚙️ ตั้งค่าทั่วไป</h3>
+      </div>
+      <div class="p-5 space-y-3">
+        <div>
+          <label class="form-label">ชื่อโรงพยาบาล / หน่วยงาน</label>
+          <div class="flex gap-2">
+            <input id="hospitalNameInput" type="text" class="form-input flex-1"
+                   value="${esc(hospitalRow.Value || '')}" placeholder="ชื่อโรงพยาบาล"/>
+            <button onclick="saveSetting('HOSPITAL_NAME','hospitalNameInput')" class="btn btn-primary btn-sm">💾</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label">จำนวนวันแจ้งเตือน (คั่นด้วย ,)</label>
+          <div class="flex gap-2">
+            <input id="alertDaysInput" type="text" class="form-input flex-1"
+                   value="${esc(alertRow.Value || '180,90,60,30,7')}" placeholder="180,90,60,30,7"/>
+            <button onclick="saveSetting('ALERT_DAYS','alertDaysInput')" class="btn btn-primary btn-sm">💾</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Setting Sheet ทั้งหมด -->
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+      <div class="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+        <h3 class="font-semibold text-slate-700 text-sm">📋 Setting Sheet</h3>
+        <span class="text-xs text-slate-400">${settings.length} รายการ</span>
+      </div>
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs">
+          <thead><tr class="bg-slate-50">
+            <th class="px-4 py-2 text-left font-semibold text-slate-500">Key</th>
+            <th class="px-4 py-2 text-left font-semibold text-slate-500">Value</th>
+            <th class="px-4 py-2 text-left font-semibold text-slate-500">รายละเอียด</th>
+          </tr></thead>
+          <tbody>
+            ${settings.map(s => `<tr class="border-t border-slate-100">
+              <td class="px-4 py-2 font-mono font-medium text-slate-700">${esc(s.Key)}</td>
+              <td class="px-4 py-2 text-slate-500">${s.Key === 'LINE_NOTIFY_TOKEN'
+                ? (s.HasValue ? `<span class="text-green-600">✅ ${esc(s.Value)}</span>` : '<span class="text-red-400">ยังไม่ตั้งค่า</span>')
+                : esc(s.Value)}</td>
+              <td class="px-4 py-2 text-slate-400">${esc(s.Detail||'')}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
       </div>
     </div>
 
     <!-- Setup -->
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
-      <div class="bg-[#0f1e3c] px-5 py-3">
-        <h3 class="text-white font-semibold text-sm">⚙️ ตั้งค่าระบบ</h3>
-      </div>
-      <div class="p-5 space-y-3">
-        <div class="text-xs text-slate-500 bg-slate-50 rounded-lg p-3">
-          คำสั่ง Setup จะสร้าง Sheet ที่ยังไม่มี และตั้งค่า Default
-        </div>
-        <button onclick="runSetup()" class="btn btn-warning w-full justify-center">
-          🔧 Setup / ตรวจสอบ Sheets
-        </button>
+    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-3">
+      <button onclick="runSetup()" class="btn btn-warning w-full justify-center">
+        🔧 Setup / ตรวจสอบ Sheets
+      </button>
+      <div class="text-xs text-slate-400 text-center space-y-0.5">
+        <p><b>GAS URL:</b> <span class="text-blue-500 break-all">${CONFIG.GAS_URL.slice(0,60)}...</span></p>
+        <p>Version ${CONFIG.VERSION} &nbsp;|&nbsp; ${App.user?.fullName} (${App.user?.role})</p>
       </div>
     </div>
 
-    <!-- Info -->
-    <div class="bg-white rounded-xl shadow-sm border border-slate-200 p-5 text-xs text-slate-500 space-y-1">
-      <p><b>GAS URL:</b> <span class="break-all text-blue-600">${CONFIG.GAS_URL}</span></p>
-      <p><b>Version:</b> ${CONFIG.VERSION}</p>
-      <p><b>User:</b> ${App.user?.fullName} (${App.user?.role})</p>
-    </div>
   </div>`;
+}
+
+function toggleTokenVisibility() {
+  const input = document.getElementById('lineTokenInput');
+  const btn   = document.getElementById('toggleTokenBtn');
+  if (input.type === 'password') { input.type = 'text';     btn.textContent = '🙈 ซ่อน'; }
+  else                           { input.type = 'password'; btn.textContent = '👁 แสดง'; }
+}
+
+async function saveLineToken() {
+  const val = document.getElementById('lineTokenInput').value.trim();
+  if (!val) return Swal.fire('แจ้งเตือน','กรุณากรอก LINE Token','warning');
+
+  showLoading('กำลังบันทึก...');
+  const res = await api('saveSettings', { key: 'LINE_NOTIFY_TOKEN', value: val });
+  hideLoading();
+
+  if (!res.success) return Swal.fire('ผิดพลาด', res.message, 'error');
+  Swal.fire({ icon:'success', title:'บันทึก Token สำเร็จ', timer:1500, showConfirmButton:false });
+  document.getElementById('lineTokenInput').value = '';
+  await loadSettings();
+}
+
+async function clearLineToken() {
+  const r = await Swal.fire({ title:'ลบ LINE Token?', text:'Token จะถูกลบออกจาก Setting Sheet',
+    icon:'warning', showCancelButton:true, confirmButtonText:'ลบ', cancelButtonText:'ยกเลิก',
+    confirmButtonColor:'#dc2626' });
+  if (!r.isConfirmed) return;
+
+  showLoading('กำลังลบ...');
+  const res = await api('saveSettings', { key: 'LINE_NOTIFY_TOKEN', value: '' });
+  hideLoading();
+
+  Swal.fire({ icon: res.success?'success':'error', title: res.success?'ลบ Token สำเร็จ':res.message, timer:1500, showConfirmButton:false });
+  if (res.success) await loadSettings();
+}
+
+async function saveSetting(key, inputId) {
+  const val = document.getElementById(inputId)?.value ?? '';
+  showLoading('กำลังบันทึก...');
+  const res = await api('saveSettings', { key, value: val });
+  hideLoading();
+  Swal.fire({ icon: res.success?'success':'error', title: res.success?res.message:res.message,
+    timer:1500, showConfirmButton:false });
 }
 
 async function testLineMessage() {
   showLoading('กำลังส่ง LINE...');
   const res = await api('sendTestLineMessage');
   hideLoading();
-  Swal.fire({ icon: res.success?'success':'error', title: res.success?'สำเร็จ':'ผิดพลาด', text: res.message });
+  Swal.fire({ icon: res.success?'success':'error', title: res.success?'ส่งสำเร็จ':'ผิดพลาด', text: res.message });
 }
 
 async function runLineNotifyManual() {
