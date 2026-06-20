@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#1e3a5f"/>
+<title>MedStock Alert</title>
+
+<!-- Google Font: Noto Sans Thai -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+
+<!-- TailwindCSS CDN -->
+<script src="https://cdn.tailwindcss.com"></script>
+
+<!-- jQuery + DataTables -->
+<link  rel="stylesheet" href="https://cdn.datatables.net/2.0.8/css/dataTables.tailwindcss.min.css"/>
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/2.0.8/js/dataTables.tailwindcss.min.js"></script>
+
+<!-- SweetAlert2 -->
+<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+<!-- html5-qrcode -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+
+<!-- Custom CSS -->
+<link rel="stylesheet" href="style.css"/>
+
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['Noto Sans Thai', 'sans-serif'],
+        },
+        colors: {
+          primary: { DEFAULT:'#2563eb', dark:'#1d4ed8', light:'#eff6ff' }
+        }
+      }
+    }
+  };
+</script>
+</head>
+<body class="bg-slate-100 min-h-screen">
+
+<!-- ═══════════════ LOADING OVERLAY ═══════════════ -->
+<div id="loadingOverlay" class="fixed inset-0 z-[9999] bg-white/80 flex flex-col items-center justify-center hidden">
+  <div class="spinner mb-3"></div>
+  <p id="loadingText" class="text-slate-500 text-sm font-medium">กำลังโหลด...</p>
+</div>
+
+<!-- ═══════════════ LOGIN VIEW ════════════════════ -->
+<div id="loginView" class="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-blue-900 via-blue-800 to-blue-700">
+  <div class="w-full max-w-sm">
+    <!-- Logo -->
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-white/20 backdrop-blur mb-4">
+        <span class="text-3xl">💊</span>
+      </div>
+      <h1 class="text-white text-2xl font-bold">MedStock Alert</h1>
+      <p class="text-blue-200 text-sm mt-1">ระบบจัดการคลังยา</p>
+    </div>
+
+    <!-- Card -->
+    <div class="bg-white rounded-2xl p-6 shadow-2xl">
+      <h2 class="text-slate-700 font-semibold text-lg mb-5 text-center">เข้าสู่ระบบ</h2>
+
+      <div class="space-y-4">
+        <div>
+          <label class="form-label">Username</label>
+          <input id="loginUsername" type="text" class="form-input" placeholder="กรอก Username"
+                 autocomplete="username" onkeydown="if(event.key==='Enter')document.getElementById('loginPassword').focus()"/>
+        </div>
+        <div>
+          <label class="form-label">Password</label>
+          <div class="relative">
+            <input id="loginPassword" type="password" class="form-input pr-10" placeholder="กรอก Password"
+                   autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()"/>
+            <button onclick="togglePw()" class="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" type="button">👁</button>
+          </div>
+        </div>
+        <button onclick="doLogin()" class="btn btn-primary w-full justify-center py-3 text-base">
+          เข้าสู่ระบบ
+        </button>
+      </div>
+
+      <p class="text-xs text-slate-400 text-center mt-4">
+        Version 1.0 &nbsp;|&nbsp; Powered by Google Apps Script
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ APP VIEW ══════════════════════ -->
+<div id="appView" class="hidden min-h-screen">
+
+  <!-- ── SIDEBAR (desktop) ── -->
+  <aside id="sidebar" class="fixed top-0 left-0 h-full w-60 bg-[#0f1e3c] z-40 flex flex-col
+                               -translate-x-full md:translate-x-0 transition-transform">
+    <!-- Logo -->
+    <div class="px-4 py-5 border-b border-white/10">
+      <div class="flex items-center gap-3">
+        <span class="text-2xl">💊</span>
+        <div>
+          <div class="text-white font-bold text-sm leading-tight">MedStock Alert</div>
+          <div class="text-blue-300 text-xs">ระบบคลังยา</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Nav -->
+    <nav class="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
+      <div class="nav-item active" onclick="navigateTo('dashboard')" data-page="dashboard">
+        <span class="nav-icon">🏠</span><span>Dashboard</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('drugs')" data-page="drugs">
+        <span class="nav-icon">💊</span><span>ทะเบียนยา</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('receive')" data-page="receive">
+        <span class="nav-icon">📥</span><span>รับยาเข้าคลัง</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('dispense')" data-page="dispense">
+        <span class="nav-icon">📤</span><span>เบิกจ่ายยา</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('lots')" data-page="lots">
+        <span class="nav-icon">📦</span><span>Lot คงคลัง</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('expiry')" data-page="expiry">
+        <span class="nav-icon">⚠️</span><span>แจ้งเตือนหมดอายุ</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('transactions')" data-page="transactions">
+        <span class="nav-icon">📋</span><span>ประวัติการเคลื่อนไหว</span>
+      </div>
+      <div class="nav-item" onclick="navigateTo('reports')" data-page="reports">
+        <span class="nav-icon">📊</span><span>รายงาน</span>
+      </div>
+      <div id="navSettings" class="nav-item hidden" onclick="navigateTo('settings')" data-page="settings">
+        <span class="nav-icon">⚙️</span><span>ตั้งค่าระบบ</span>
+      </div>
+    </nav>
+
+    <!-- User info -->
+    <div class="px-4 py-4 border-t border-white/10">
+      <div class="flex items-center gap-2 mb-2">
+        <div class="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-bold" id="userAvatar">A</div>
+        <div>
+          <div id="sidebarUser" class="text-white text-xs font-semibold">Admin</div>
+          <div id="sidebarRole" class="text-blue-300 text-xs">ผู้ดูแลระบบ</div>
+        </div>
+      </div>
+      <button onclick="logout()" class="btn btn-secondary btn-sm w-full justify-center text-xs">
+        🚪 ออกจากระบบ
+      </button>
+    </div>
+  </aside>
+
+  <!-- ── SIDEBAR OVERLAY (mobile) ── -->
+  <div id="sidebarOverlay" class="fixed inset-0 bg-black/50 z-30 hidden md:hidden"
+       onclick="closeSidebar()"></div>
+
+  <!-- ── MAIN CONTENT ── -->
+  <div class="md:ml-60 flex flex-col min-h-screen pb-20 md:pb-0">
+
+    <!-- Top Bar -->
+    <header id="topBar" class="bg-white border-b border-slate-200 px-4 py-3 flex items-center gap-3 sticky top-0 z-20 no-print">
+      <button onclick="toggleSidebar()" class="md:hidden text-slate-500 text-xl p-1">☰</button>
+      <h2 id="pageTitle" class="font-semibold text-slate-700 flex-1 text-sm md:text-base">Dashboard</h2>
+      <div class="flex items-center gap-2">
+        <button onclick="navigateTo('expiry')" class="relative">
+          <span class="text-lg">🔔</span>
+          <span id="alertBadge" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full w-4 h-4 items-center justify-center hidden">!</span>
+        </button>
+        <div class="text-xs text-slate-400 hidden md:block" id="currentDateTime"></div>
+      </div>
+    </header>
+
+    <!-- Page Sections -->
+    <main id="mainContent" class="flex-1 p-4">
+
+      <!-- Dashboard -->
+      <section id="pageDashboard" class="page-section"></section>
+
+      <!-- Drugs -->
+      <section id="pageDrugs" class="page-section hidden"></section>
+
+      <!-- Receive -->
+      <section id="pageReceive" class="page-section hidden"></section>
+
+      <!-- Dispense -->
+      <section id="pageDispense" class="page-section hidden"></section>
+
+      <!-- Lots -->
+      <section id="pageLots" class="page-section hidden"></section>
+
+      <!-- Expiry -->
+      <section id="pageExpiry" class="page-section hidden"></section>
+
+      <!-- Transactions -->
+      <section id="pageTransactions" class="page-section hidden"></section>
+
+      <!-- Reports -->
+      <section id="pageReports" class="page-section hidden"></section>
+
+      <!-- Settings -->
+      <section id="pageSettings" class="page-section hidden"></section>
+
+    </main>
+  </div><!-- /main content -->
+
+  <!-- ── BOTTOM NAV (mobile) ── -->
+  <nav id="bottomNav" class="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 flex md:hidden z-20 px-1 py-1 no-print">
+    <div class="bn-item active" onclick="navigateTo('dashboard')" data-page="dashboard">
+      <span class="bn-icon">🏠</span><span>หน้าหลัก</span>
+    </div>
+    <div class="bn-item" onclick="navigateTo('drugs')" data-page="drugs">
+      <span class="bn-icon">💊</span><span>ยา</span>
+    </div>
+    <div class="bn-item" onclick="navigateTo('receive')" data-page="receive">
+      <span class="bn-icon">📥</span><span>รับเข้า</span>
+    </div>
+    <div class="bn-item" onclick="navigateTo('dispense')" data-page="dispense">
+      <span class="bn-icon">📤</span><span>เบิกจ่าย</span>
+    </div>
+    <div class="bn-item" onclick="navigateTo('expiry')" data-page="expiry">
+      <span class="bn-icon">⚠️</span><span>แจ้งเตือน</span>
+    </div>
+    <div class="bn-item" onclick="navigateTo('reports')" data-page="reports">
+      <span class="bn-icon">📊</span><span>รายงาน</span>
+    </div>
+  </nav>
+
+</div><!-- /appView -->
+
+<!-- ═══════════════ BARCODE SCANNER MODAL ═════════ -->
+<div id="barcodeModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 modal-backdrop">
+  <div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl overflow-hidden">
+    <div class="bg-[#0f1e3c] px-4 py-3 flex items-center justify-between">
+      <span class="text-white font-semibold text-sm">📷 สแกน Barcode / QR Code</span>
+      <button onclick="closeBarcodeScanner()" class="text-white/70 hover:text-white text-xl leading-none">✕</button>
+    </div>
+    <div class="p-4">
+      <div id="barcodeReader" class="w-full"></div>
+      <p class="text-xs text-slate-400 text-center mt-3">จ่อกล้องไปที่ Barcode หรือ QR Code</p>
+      <div class="mt-3">
+        <label class="form-label">หรือพิมพ์ Barcode</label>
+        <div class="flex gap-2">
+          <input id="manualBarcodeInput" type="text" class="form-input flex-1" placeholder="พิมพ์ Barcode..."
+                 onkeydown="if(event.key==='Enter')submitManualBarcode()"/>
+          <button onclick="submitManualBarcode()" class="btn btn-primary btn-sm whitespace-nowrap">ค้นหา</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ DRUG FORM MODAL ═══════════════ -->
+<div id="drugModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 modal-backdrop">
+  <div class="modal-box w-full max-w-lg shadow-2xl">
+    <div class="bg-[#0f1e3c] px-5 py-4 flex items-center justify-between rounded-t-2xl">
+      <span id="drugModalTitle" class="text-white font-semibold">เพิ่มรายการยา</span>
+      <button onclick="closeDrugModal()" class="text-white/70 hover:text-white text-xl">✕</button>
+    </div>
+    <div class="p-5 space-y-3">
+      <input type="hidden" id="drugFormID"/>
+      <div class="grid grid-cols-2 gap-3">
+        <div class="col-span-2">
+          <label class="form-label">Barcode <span class="text-red-500">*</span></label>
+          <div class="flex gap-2">
+            <input id="drugBarcode" type="text" class="form-input flex-1" placeholder="Barcode หรือสแกน"/>
+            <button onclick="openBarcodeScanner(bc=>document.getElementById('drugBarcode').value=bc)" class="btn btn-secondary btn-sm whitespace-nowrap">📷 สแกน</button>
+          </div>
+        </div>
+        <div>
+          <label class="form-label">Drug Code</label>
+          <input id="drugCode" type="text" class="form-input" placeholder="รหัสยาภายใน"/>
+        </div>
+        <div class="col-span-2">
+          <label class="form-label">ชื่อยา <span class="text-red-500">*</span></label>
+          <input id="drugName" type="text" class="form-input" placeholder="ชื่อการค้า"/>
+        </div>
+        <div class="col-span-2">
+          <label class="form-label">Generic Name</label>
+          <input id="drugGeneric" type="text" class="form-input" placeholder="ชื่อสามัญทางยา"/>
+        </div>
+        <div>
+          <label class="form-label">ความแรง (Strength)</label>
+          <input id="drugStrength" type="text" class="form-input" placeholder="เช่น 500 mg"/>
+        </div>
+        <div>
+          <label class="form-label">หน่วย (Unit) <span class="text-red-500">*</span></label>
+          <input id="drugUnit" type="text" class="form-input" placeholder="เช่น เม็ด, ขวด"/>
+        </div>
+        <div>
+          <label class="form-label">Stock ขั้นต่ำ</label>
+          <input id="drugMinStock" type="number" class="form-input" placeholder="0" min="0"/>
+        </div>
+        <div>
+          <label class="form-label">สถานะ</label>
+          <select id="drugStatus" class="form-input form-select">
+            <option value="Active">Active</option>
+            <option value="Inactive">Inactive</option>
+          </select>
+        </div>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button onclick="submitDrugForm()" class="btn btn-primary flex-1 justify-center">💾 บันทึก</button>
+        <button onclick="closeDrugModal()" class="btn btn-secondary flex-1 justify-center">ยกเลิก</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ RECEIVE STOCK MODAL ═══════════ -->
+<div id="receiveModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 modal-backdrop">
+  <div class="modal-box w-full max-w-lg shadow-2xl">
+    <div class="bg-green-800 px-5 py-4 flex items-center justify-between rounded-t-2xl">
+      <span class="text-white font-semibold">📥 รับยาเข้าคลัง</span>
+      <button onclick="closeReceiveModal()" class="text-white/70 hover:text-white text-xl">✕</button>
+    </div>
+    <div class="p-5 space-y-3" id="receiveFormContent">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ DISPENSE MODAL ════════════════ -->
+<div id="dispenseModal" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 modal-backdrop">
+  <div class="modal-box w-full max-w-lg shadow-2xl">
+    <div class="bg-orange-800 px-5 py-4 flex items-center justify-between rounded-t-2xl">
+      <span class="text-white font-semibold">📤 เบิกจ่ายยา (FEFO)</span>
+      <button onclick="closeDispenseModal()" class="text-white/70 hover:text-white text-xl">✕</button>
+    </div>
+    <div class="p-5 space-y-3" id="dispenseFormContent">
+      <!-- Filled by JS -->
+    </div>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="config.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
